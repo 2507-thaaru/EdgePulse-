@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EdgePulse — Live Reasoning Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-base: #030406;
+    --panel-bg: rgba(20, 22, 28, 0.4);
+    --panel-border: rgba(255, 255, 255, 0.06);
+    --text-main: #F0F2F5;
+    --text-dim: #8B93A0;
+    
+    /* Branding / Semantics */
+    --local: #00F0FF;     /* Neon Teal */
+    --cloud: #FFB000;     /* Amber */
+    --normal: #00F0FF;
+    --advisory: #F5C518;
+    --warning: #FB923C;
+    --critical: #FF3344;  /* Neon Red */
+    
+    /* Fonts */
+    --mono: 'JetBrains Mono', monospace;
+    --display: 'Space Grotesk', sans-serif;
+    --body: 'Inter', sans-serif;
+    
+    /* Glassmorphism */
+    --glass-blur: blur(16px);
+  }
+
+  * { box-sizing: border-box; }
+  
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg-base);
+    color: var(--text-main);
+    font-family: var(--body);
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* Cinematic ambient glow */
+  .ambient-glow {
+    position: fixed;
+    top: -20vh; left: -15vw;
+    width: 60vw; height: 60vw;
+    background: radial-gradient(circle, rgba(0, 240, 255, 0.06) 0%, transparent 60%);
+    z-index: -1;
+    pointer-events: none;
+  }
+  .ambient-glow.right {
+    top: auto; left: auto;
+    bottom: -30vh; right: -20vw;
+    background: radial-gradient(circle, rgba(255, 51, 68, 0.04) 0%, transparent 60%);
+  }
+
+  .app-layout {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    padding: 24px;
+    gap: 20px;
+    max-width: 1800px;
+    margin: 0 auto;
+  }
+
+  /* ---------- Header ---------- */
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 24px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--panel-border);
+    flex-shrink: 0;
+  }
+
+  .brand { display: flex; align-items: center; gap: 18px; }
+  
+  .pulse-ring {
+    width: 48px; height: 48px; border-radius: 50%;
+    border: 2px solid var(--local);
+    display: flex; align-items: center; justify-content: center;
+    position: relative; flex-shrink: 0;
+    box-shadow: 0 0 15px rgba(0, 240, 255, 0.2);
+  }
+  .pulse-ring::after {
+    content: ''; position: absolute; inset: -8px; border-radius: 50%;
+    border: 1px solid var(--local); opacity: 0;
+  }
+  .pulse-ring.tick::after { animation: pulseOut 0.8s cubic-bezier(0.1, 0.8, 0.3, 1); }
+  @keyframes pulseOut {
+    0% { opacity: 0.8; transform: scale(0.7); }
+    100% { opacity: 0; transform: scale(1.6); }
+  }
+  
+  .pulse-dot {
+    width: 12px; height: 12px; border-radius: 50%;
+    background: var(--local);
+    box-shadow: 0 0 10px var(--local);
+  }
+
+  .brand h1 {
+    font-family: var(--display); font-size: 24px; font-weight: 700;
+    letter-spacing: 1px; margin: 0;
+    background: linear-gradient(90deg, #FFFFFF, #B0C4DE);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .brand .sub {
+    font-family: var(--mono); font-size: 12px; color: var(--text-dim);
+    letter-spacing: 0.8px; margin-top: 4px;
+  }
+
+  .status-cluster { display: flex; align-items: center; gap: 12px; }
+  .badge {
+    font-family: var(--mono); font-size: 11px; padding: 6px 12px; border-radius: 6px;
+    background: var(--panel-bg); border: 1px solid var(--panel-border);
+    backdrop-filter: var(--glass-blur);
+    color: var(--text-main);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .badge .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .badge.online .dot { background: var(--local); box-shadow: 0 0 8px var(--local); }
+  .badge.offline { border-color: rgba(255, 51, 68, 0.4); color: var(--critical); }
+  .badge.offline .dot { background: var(--critical); box-shadow: 0 0 8px var(--critical); }
+
+  .controls { display: flex; gap: 10px; flex-wrap: wrap; }
+  button.ctl {
+    font-family: var(--mono); font-size: 11px; color: var(--text-dim);
+    background: rgba(255,255,255,0.03); border: 1px solid var(--panel-border);
+    padding: 8px 14px; border-radius: 6px; cursor: pointer; letter-spacing: 0.5px;
+    backdrop-filter: var(--glass-blur);
+    transition: all 0.2s ease;
+  }
+  button.ctl:hover { border-color: rgba(255,255,255,0.2); color: var(--text-main); background: rgba(255,255,255,0.06); }
+  button.ctl.active {
+    border-color: var(--local); color: var(--local);
+    background: rgba(0, 240, 255, 0.08);
+    box-shadow: 0 0 12px rgba(0, 240, 255, 0.1);
+  }
+  button.ctl.danger.active, button.ctl.danger:hover {
+    border-color: var(--critical); color: var(--critical);
+    background: rgba(255, 51, 68, 0.08);
+    box-shadow: 0 0 12px rgba(255, 51, 68, 0.15);
+  }
+
+  /* ---------- Split Screen Layout ---------- */
+  .workspace {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    flex-grow: 1;
+    min-height: 0;
+  }
+
+  .panel {
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 12px;
+    backdrop-filter: var(--glass-blur);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+
+  .panel-header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--panel-border);
+    background: rgba(0,0,0,0.2);
+  }
+  .panel-header h2 {
+    font-family: var(--display); font-size: 14px; letter-spacing: 1.5px;
+    color: var(--text-main); text-transform: uppercase; margin: 0;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .panel-header h2::before {
+    content: ''; display: block; width: 4px; height: 14px;
+    background: var(--local); border-radius: 2px;
+  }
+  .panel-subtitle { font-family: var(--mono); font-size: 11px; color: var(--text-dim); }
+
+  /* ---------- Left: Code Visualizer ---------- */
+  .editor-layout {
+    display: flex; flex-direction: column; flex-grow: 1; overflow: hidden;
+  }
+  
+  .code-window {
+    flex-grow: 1;
+    padding: 16px;
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.6;
+    color: #A9B7C6;
+    overflow-y: auto;
+    position: relative;
+    background: #0D1117;
+  }
+  .code-line {
+    display: flex;
+    padding: 2px 8px;
+    border-radius: 4px;
+    transition: background-color 0.2s ease, transform 0.2s ease;
+    border: 1px solid transparent;
+  }
+  .line-num {
+    color: #4B5263;
+    width: 30px;
+    flex-shrink: 0;
+    text-align: right;
+    margin-right: 16px;
+    user-select: none;
+  }
+  .code-content { white-space: pre; }
+  
+  /* Syntax Highlighting Colors */
+  .sy-keyword { color: #C678DD; }
+  .sy-func { color: #61AFEF; }
+  .sy-string { color: #98C379; }
+  .sy-comment { color: #5C6370; font-style: italic; }
+  .sy-var { color: #E5C07B; }
+  
+  /* Execution Highlights */
+  .code-line.executing {
+    background: rgba(0, 240, 255, 0.15);
+    border-color: rgba(0, 240, 255, 0.4);
+    box-shadow: 0 0 10px rgba(0, 240, 255, 0.1);
+  }
+  
+  /* Memory Context Panel */
+  .context-window {
+    height: 220px;
+    border-top: 1px solid var(--panel-border);
+    background: #0F131A;
+    padding: 12px;
+    display: flex; flex-direction: column;
+  }
+  .context-header {
+    font-family: var(--display); font-size: 12px; text-transform: uppercase;
+    letter-spacing: 1px; color: var(--text-dim); margin-bottom: 8px;
+  }
+  .context-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px; flex-grow: 1; overflow: hidden;
+  }
+  .memory-block {
+    background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.05);
+    border-radius: 6px; padding: 10px; font-family: var(--mono); font-size: 11px;
+    overflow-y: auto; color: #98C379;
+    opacity: 0.3; transition: opacity 0.3s;
+  }
+  .memory-block.active { opacity: 1; border-color: rgba(0,240,255,0.3); box-shadow: 0 0 10px rgba(0,240,255,0.05); }
+  .memory-block.cloud-active { opacity: 1; border-color: rgba(255,176,0,0.3); color: #E5C07B; box-shadow: 0 0 10px rgba(255,176,0,0.05); }
+  
+  .memory-title { color: #FFF; margin-bottom: 6px; font-weight: 600; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 4px; }
+  .memory-data { white-space: pre-wrap; word-wrap: break-word; }
+
+  /* ---------- Right: Dashboard ---------- */
+  .dashboard-layout {
+    display: flex; flex-direction: column; flex-grow: 1; padding: 20px; gap: 20px;
+    overflow-y: auto;
+  }
+  
+  .offline-banner {
+    display: none; align-items: center; justify-content: center; gap: 12px;
+    background: rgba(255, 51, 68, 0.1); border: 1px solid rgba(255, 51, 68, 0.3);
+    color: var(--critical); padding: 10px; border-radius: 8px;
+    font-family: var(--mono); font-size: 12px; font-weight: 600;
+    letter-spacing: 1px; text-transform: uppercase;
+    animation: pulseBanner 2s infinite;
+    flex-shrink: 0;
+  }
+  .offline-banner.active { display: flex; }
+  @keyframes pulseBanner {
+    0% { box-shadow: 0 0 0 0 rgba(255,51,68, 0.4); }
+    70% { box-shadow: 0 0 0 10px rgba(255,51,68, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(255,51,68, 0); }
+  }
+
+  .gauges { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .gauge-card {
+    background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.03);
+    border-radius: 8px; padding: 12px;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .gauge-top { display: flex; justify-content: space-between; align-items: flex-end; }
+  .gauge-label { font-size: 12px; font-weight: 500; color: var(--text-dim); }
+  .gauge-value-wrap { display: flex; align-items: baseline; gap: 4px; }
+  .gauge-val { font-family: var(--mono); font-size: 18px; font-weight: 600; color: #FFF; }
+  .gauge-unit { font-family: var(--mono); font-size: 10px; color: var(--text-dim); }
+  
+  .gauge-bar-bg { width: 100%; height: 3px; background: rgba(255,255,255,0.06); border-radius: 2px; overflow: hidden; }
+  .gauge-bar-fill {
+    height: 100%; width: 0%; border-radius: 2px; background: var(--local);
+    transition: width 0.4s cubic-bezier(0.2, 0.8, 0.2, 1), background-color 0.4s;
+  }
+  .gauge-bar-fill.warning { background: var(--warning); }
+  .gauge-bar-fill.critical { background: var(--critical); box-shadow: 0 0 8px var(--critical); }
+
+  .feed-container {
+    display: flex; flex-direction: column; gap: 12px; flex-grow: 1; padding-right: 4px;
+  }
+  .card {
+    background: rgba(0,0,0,0.4); border: 1px solid var(--panel-border);
+    border-left: 4px solid var(--sev-color, var(--normal));
+    border-radius: 10px; padding: 16px;
+    display: flex; flex-direction: column; gap: 10px;
+    animation: slideUpFade 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+    position: relative; overflow: hidden;
+  }
+  @keyframes slideUpFade { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+  .card-header { display: flex; justify-content: space-between; align-items: center; }
+  .sev-tag {
+    font-family: var(--mono); font-size: 10px; font-weight: 600; letter-spacing: 1px;
+    text-transform: uppercase; padding: 3px 8px; border-radius: 4px; color: #000;
+  }
+  .card-time { font-family: var(--mono); font-size: 11px; color: var(--text-dim); }
+  .card-summary { font-size: 14px; font-weight: 500; color: #FFF; line-height: 1.4; }
+  .verify-box {
+    margin-top: 4px; padding: 10px 12px; border-radius: 6px;
+    font-family: var(--mono); font-size: 11px; line-height: 1.5;
+    display: flex; gap: 10px; align-items: flex-start;
+    background: rgba(255, 176, 0, 0.05); border: 1px solid rgba(255, 176, 0, 0.2); color: var(--cloud);
+  }
+  .verify-box.disagree { background: rgba(255, 51, 68, 0.05); border-color: rgba(255, 51, 68, 0.2); color: var(--critical); }
+  
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: rgba(255,255,255,0.02); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+</style>
+</head>
+<body>
+<div class="ambient-glow"></div>
+<div class="ambient-glow right"></div>
+
+<div class="app-layout">
+
+  <div class="header">
+    <div class="brand">
+      <div class="pulse-ring" id="pulseRing"><div class="pulse-dot"></div></div>
+      <div>
+        <h1>EDGEPULSE</h1>
+        <div class="sub">CONTINUOUS VEHICLE REASONING</div>
+      </div>
+    </div>
+
+    <div class="status-cluster">
+      <div class="badge online" id="connBadge"><span class="dot"></span><span id="connText">CLOUD LINK: ONLINE</span></div>
+      <div class="badge" id="scenarioBadge" style="border-color: rgba(255,255,255,0.1);">SCENARIO: NORMAL</div>
+    </div>
+
+    <div class="controls">
+      <button class="ctl active" data-scenario="normal">Normal</button>
+      <button class="ctl" data-scenario="gradual_wear">Gradual Wear</button>
+      <button class="ctl" data-scenario="multi_symptom">Multi-Symptom</button>
+      <button class="ctl danger" id="connToggle">Force Offline</button>
+    </div>
+  </div>
+
+  <div class="workspace">
+    <!-- LEFT PANEL: CODE VISUALIZER -->
+    <div class="panel">
+      <div class="panel-header">
+        <h2>Backend Execution</h2>
+        <span class="panel-subtitle">backend/reasoning_loop.py</span>
+      </div>
+      <div class="editor-layout">
+        <div class="code-window" id="codeWindow">
+          <!-- Code injected via JS -->
+        </div>
+        <div class="context-window">
+          <div class="context-header">Execution Context (Memory)</div>
+          <div class="context-grid">
+            <div class="memory-block" id="memTelemetry">
+              <div class="memory-title">telemetry_snapshot</div>
+              <div class="memory-data" id="memTelemetryData">{}</div>
+            </div>
+            <div class="memory-block" id="memDiagnosis">
+              <div class="memory-title">local_diagnosis</div>
+              <div class="memory-data" id="memDiagnosisData">{}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT PANEL: DASHBOARD UI -->
+    <div class="panel">
+      <div class="panel-header">
+        <h2 style="color:var(--local)">Live Dashboard</h2>
+        <span class="panel-subtitle">UI Output</span>
+      </div>
+      <div class="dashboard-layout">
+        <div class="offline-banner" id="offlineBanner">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" y1="2" x2="22" y2="22"/></svg>
+          System Offline — Local Edge Reasoning Active
+        </div>
+
+        <div class="gauges" id="gauges">
+          <div class="gauge-card"><div class="gauge-top"><span class="gauge-label">Engine</span><div class="gauge-value-wrap"><span class="gauge-val" id="v-engine">—</span><span class="gauge-unit">°C</span></div></div><div class="gauge-bar-bg"><div class="gauge-bar-fill" id="bar-engine"></div></div></div>
+          <div class="gauge-card"><div class="gauge-top"><span class="gauge-label">Oil Press</span><div class="gauge-value-wrap"><span class="gauge-val" id="v-oil">—</span><span class="gauge-unit">kPa</span></div></div><div class="gauge-bar-bg"><div class="gauge-bar-fill" id="bar-oil"></div></div></div>
+          <div class="gauge-card"><div class="gauge-top"><span class="gauge-label">Battery</span><div class="gauge-value-wrap"><span class="gauge-val" id="v-batt">—</span><span class="gauge-unit">V</span></div></div><div class="gauge-bar-bg"><div class="gauge-bar-fill" id="bar-batt"></div></div></div>
+          <div class="gauge-card"><div class="gauge-top"><span class="gauge-label">Brakes</span><div class="gauge-value-wrap"><span class="gauge-val" id="v-brake">—</span><span class="gauge-unit">%</span></div></div><div class="gauge-bar-bg"><div class="gauge-bar-fill" id="bar-brake"></div></div></div>
+        </div>
+
+        <div class="feed-container" id="feed">
+          <div style="text-align:center; padding:40px; color:var(--text-dim); font-family:var(--mono); font-size:12px;">Waiting for first execution cycle...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // --- UI Update Logic ---
+  const sevColors = { normal: 'var(--normal)', advisory: 'var(--advisory)', warning: 'var(--warning)', critical: 'var(--critical)' };
+  
+  function updateGauge(id, val, min, max, digits=1, invertColoring=false) {
+    if(typeof val !== 'number') return;
+    document.getElementById(`v-${id}`).textContent = val.toFixed(digits);
+    let pct = Math.max(0, Math.min(100, ((val - min) / (max - min)) * 100));
+    const bar = document.getElementById(`bar-${id}`);
+    bar.style.width = `${pct}%`;
+    bar.classList.remove('warning', 'critical');
+    let riskPct = invertColoring ? (100 - pct) : pct;
+    if (riskPct > 85) bar.classList.add('critical');
+    else if (riskPct > 70) bar.classList.add('warning');
+  }
+
+  function renderDashboard(result) {
+    const t = result.telemetry;
+    updateGauge('engine', t.engine_temp_c, 0, 150);
+    updateGauge('oil', t.oil_pressure_kpa, 0, 500, 1, true); 
+    updateGauge('batt', t.battery_voltage_v, 9, 15, 2, true); 
+    updateGauge('brake', t.brake_wear_pct, 0, 100);
+
+    document.getElementById('connBadge').className = 'badge ' + (t.connectivity ? 'online' : 'offline');
+    document.getElementById('connText').textContent = t.connectivity ? 'CLOUD LINK: ONLINE' : 'CLOUD LINK: OFFLINE';
+    document.getElementById('offlineBanner').classList.toggle('active', !t.connectivity);
+    document.getElementById('scenarioBadge').textContent = 'SCENARIO: ' + t.scenario.toUpperCase();
+
+    // Render Card
+    const d = result.diagnosis;
+    const v = result.verification;
+    const color = sevColors[d.severity] || 'var(--normal)';
+    
+    let verifyHtml = '';
+    if (v) {
+      if (!v.verified) verifyHtml = `<div class="verify-box"><span class="verify-icon">◍</span><span>${v.notes}</span></div>`;
+      else if (v.agreement) verifyHtml = `<div class="verify-box"><span class="verify-icon">✓</span><span><b>Cloud Verifier:</b> Agrees with local model. ${v.notes}</span></div>`;
+      else verifyHtml = `<div class="verify-box disagree"><span class="verify-icon">⚠</span><span><b>Cloud Verifier DISAGREES:</b> ${v.notes}</span></div>`;
+    }
+
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.style.setProperty('--sev-color', color);
+    card.innerHTML = `
+      <div class="card-header"><span class="sev-tag" style="background:${color}">${d.severity}</span><span class="card-time">${new Date().toLocaleTimeString()}</span></div>
+      <div class="card-summary">${d.summary}</div>
+      ${verifyHtml}
+    `;
+    
+    const feed = document.getElementById('feed');
+    if(feed.children[0] && feed.children[0].innerText.includes('Waiting')) feed.innerHTML = '';
+    feed.prepend(card);
+    while (feed.children.length > 20) feed.removeChild(feed.lastChild);
+  }
+
+  // --- Code Visualizer Logic ---
+  const rawCode = `
+<span class="sy-keyword">async def</span> <span class="sy-func">run_one_cycle</span>(self) -> ReasoningCycleResult:
+    self._cycle_count += 1
+    
+    <span class="sy-comment"># 1. Pull telemetry snapshot from sensors</span>
+    telemetry = self.generator.tick()
+
+    <span class="sy-comment"># 2. Local AI reasons immediately (No network wait)</span>
+    diagnosis = <span class="sy-keyword">await</span> get_local_diagnosis(telemetry, self.history)
+    self.history.append(telemetry)
+
+    <span class="sy-comment"># 3. Determine if we should verify via cloud</span>
+    should_verify = (
+        self._cycle_count % VERIFICATION_INTERVAL == 0
+        <span class="sy-keyword">or</span> diagnosis.severity <span class="sy-keyword">in</span> ESCALATED
+    )
+
+    verification = <span class="sy-keyword">None</span>
+    <span class="sy-keyword">if</span> should_verify:
+        <span class="sy-comment"># 4. Asynchronous Cloud Verification (Llama 70B)</span>
+        verification = <span class="sy-keyword">await</span> verify_diagnosis(telemetry, diagnosis)
+
+    <span class="sy-comment"># 5. Build result and push to Dashboard UI</span>
+    result = ReasoningCycleResult(telemetry, diagnosis, verification)
+    <span class="sy-keyword">await</span> self._publish(result)
+    
+    <span class="sy-keyword">return</span> result
+`;
+
+  const codeLines = rawCode.trim().split('\n');
+  const codeWindow = document.getElementById('codeWindow');
+  
+  codeLines.forEach((line, index) => {
+    const div = document.createElement('div');
+    div.className = 'code-line';
+    div.id = `line-${index}`;
+    div.innerHTML = `<div class="line-num">${index + 1}</div><div class="code-content">${line}</div>`;
+    codeWindow.appendChild(div);
+  });
+
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  let executionQueue = Promise.resolve();
+
+  // Maps logical steps to line numbers in the rawCode snippet above
+  const lines = {
+    tick: 4,
+    local: 7,
+    checkVerify: 11,
+    cloud: 17,
+    publish: 21
+  };
+
+  function highlight(lineIdx) {
+    document.querySelectorAll('.code-line').forEach(el => el.classList.remove('executing'));
+    if(lineIdx !== null) {
+      document.getElementById(`line-${lineIdx}`).classList.add('executing');
+    }
+  }
+
+  function formatJSON(obj) {
+    return JSON.stringify(obj, null, 2).replace(/[{}"]/g, '');
+  }
+
+  async function animateExecution(result) {
+    const pulseRing = document.getElementById('pulseRing');
+    pulseRing.classList.remove('tick'); void pulseRing.offsetWidth; pulseRing.classList.add('tick');
+
+    const memT = document.getElementById('memTelemetry');
+    const memD = document.getElementById('memDiagnosis');
+    
+    // Step 1: Telemetry
+    highlight(lines.tick);
+    memT.classList.add('active');
+    document.getElementById('memTelemetryData').innerText = `speed: ${result.telemetry.speed_kmh}\nengine_temp: ${result.telemetry.engine_temp_c}\noil_pressure: ${result.telemetry.oil_pressure_kpa}`;
+    await sleep(400);
+
+    // Step 2: Local AI
+    highlight(lines.local);
+    memD.classList.add('active');
+    document.getElementById('memDiagnosisData').innerText = `severity: ${result.diagnosis.severity}\nsummary: ${result.diagnosis.summary.substring(0,30)}...`;
+    await sleep(600);
+
+    // Step 3: Cloud Check
+    highlight(lines.checkVerify);
+    await sleep(200);
+
+    if (result.verification) {
+      highlight(lines.cloud);
+      memD.classList.add('cloud-active');
+      document.getElementById('memDiagnosisData').innerText += `\n\n[CLOUD VERIFIER]\nverified: ${result.verification.verified}\nagreement: ${result.verification.agreement}`;
+      await sleep(600);
+    }
+
+    // Step 4: Publish to UI
+    highlight(lines.publish);
+    renderDashboard(result);
+    await sleep(400);
+
+    // Cleanup
+    highlight(null);
+    memT.classList.remove('active');
+    memD.classList.remove('active', 'cloud-active');
+    document.getElementById('memTelemetryData').innerText = '{}';
+    document.getElementById('memDiagnosisData').innerText = '{}';
+  }
+
+  function connect(){
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    const ws = new WebSocket(`${proto}://${location.host}/ws`);
+    ws.onmessage = (evt) => {
+      const result = JSON.parse(evt.data);
+      // Chain executions so they don't overlap if messages arrive fast
+      executionQueue = executionQueue.then(() => animateExecution(result));
+    };
+    ws.onclose = () => setTimeout(connect, 1500);
+  }
+  connect();
+
+  // --- API Controls ---
+  document.querySelectorAll('button[data-scenario]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (btn.dataset.scenario !== 'low_connectivity') {
+        document.querySelectorAll('button[data-scenario]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      }
+      const scenario = btn.dataset.scenario;
+      if (scenario === 'low_connectivity') {
+        const connToggle = document.getElementById('connToggle');
+        if(!connToggle.classList.contains('active')) connToggle.click();
+      } else {
+        await fetch(`/api/scenario/${scenario}`, { method: 'POST' });
+        const connToggle = document.getElementById('connToggle');
+        if(connToggle.classList.contains('active')) connToggle.click();
+      }
+    });
+  });
+
+  let forcedOffline = false;
+  document.getElementById('connToggle').addEventListener('click', async (e) => {
+    forcedOffline = !forcedOffline;
+    e.target.textContent = forcedOffline ? 'Restore Cloud' : 'Force Offline';
+    e.target.classList.toggle('active', forcedOffline);
+    await fetch(`/api/connectivity/${forcedOffline ? 'off' : 'on'}`, { method: 'POST' });
+  });
+</script>
+</body>
+</html>
